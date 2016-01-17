@@ -257,7 +257,7 @@ NOTE:
 testOverwriteNonEmptyDirectory    skipped   
 testCreatedFileIsImmediatelyVisible  skipped    
 testOverwriteEmptyDirectory   skipped   
-三项测试内容是Skipped状态, AWS S3A和Aliyun OSS皆不支持.
+Above three tests are skipped, both AWS S3A and Aliyun OSS does not support these tests. 
 ```
 
 ![alt text](https://raw.githubusercontent.com/aliyun-beta/aliyun-oss-hadoop-fs/master/hadoop-tools/hadoop-aliyun-oss/src/site/resources/TCs.JPG "Title")

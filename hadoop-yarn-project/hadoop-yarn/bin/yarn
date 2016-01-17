@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+MYNAME="${BASH_SOURCE-$0}"
+
+function hadoop_usage
+{
+  hadoop_add_option "--buildpaths" "attempt to add class files from build tree"
+  hadoop_add_option "--daemon (start|status|stop)" "operate on a daemon"
+  hadoop_add_option "--hostnames list[,of,host,names]" "hosts to use in slave mode"
+  hadoop_add_option "--loglevel level" "set the log4j level for this command"
+  hadoop_add_option "--hosts filename" "list of hosts to use in slave mode"
+  hadoop_add_option "--slaves" "turn on slave mode"
+
+  hadoop_add_subcommand "application" "prints application(s) report/kill application"
+  hadoop_add_subcommand "applicationattempt" "prints applicationattempt(s) report"
+  hadoop_add_subcommand "classpath" "prints the class path needed to get the hadoop jar and the required libraries"
+  hadoop_add_subcommand "cluster" "prints cluster information"
+  hadoop_add_subcommand "container" "prints container(s) report"
+  hadoop_add_subcommand "daemonlog" "get/set the log level for each daemon"
+  hadoop_add_subcommand "envvars" "display computed Hadoop environment variables"
+  hadoop_add_subcommand "jar <jar>" "run a jar file"
+  hadoop_add_subcommand "logs" "dump container logs"
+  hadoop_add_subcommand "node" "prints node report(s)"
+  hadoop_add_subcommand "nodemanager" "run a nodemanager on each slave"
+  hadoop_add_subcommand "proxyserver" "run the web app proxy server"
+  hadoop_add_subcommand "queue" "prints queue information"
+  hadoop_add_subcommand "resourcemanager" "run the ResourceManager"
+  hadoop_add_subcommand "rmadmin" "admin tools"
+  hadoop_add_subcommand "scmadmin" "SharedCacheManager admin tools"
+  hadoop_add_subcommand "sharedcachemanager" "run the SharedCacheManager daemon"
+  hadoop_add_subcommand "timelineserver" "run the timeline server"
+  hadoop_add_subcommand "top" "view cluster information"
+  hadoop_add_subcommand "version" "print the version"
+  hadoop_generate_usage "${MYNAME}" true
+}
+
+
+# let's locate libexec...
+if [[ -n "${HADOOP_PREFIX}" ]]; then
+  HADOOP_DEFAULT_LIBEXEC_DIR="${HADOOP_PREFIX}/libexec"
+else
+  bin=$(cd -P -- "$(dirname -- "${MYNAME}")" >/dev/null && pwd -P)
+  HADOOP_DEFAULT_LIBEXEC_DIR="${bin}/../libexec"
+fi
+
+HADOOP_LIBEXEC_DIR="${HADOOP_LIBEXEC_DIR:-$HADOOP_DEFAULT_LIBEXEC_DIR}"
+# shellcheck disable=SC2034
+HADOOP_NEW_CONFIG=true
+if [[ -f "${HADOOP_LIBEXEC_DIR}/yarn-config.sh" ]]; then
+  . "${HADOOP_LIBEXEC_DIR}/yarn-config.sh"
+else
+  echo "ERROR: Cannot execute ${HADOOP_LIBEXEC_DIR}/yarn-config.sh." 2>&1
+  exit 1
+fi
+
+# if no args specified, show usage
+if [[ $# = 0 ]]; then
+  hadoop_exit_with_usage 1
+fi
+
+# get arguments
+COMMAND=$1
+shift
+
+case "${COMMAND}" in
+  application|applicationattempt|container)
+    CLASS=org.apache.hadoop.yarn.client.cli.ApplicationCLI
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+    set -- "${COMMAND}" "$@"
+  ;;
+  classpath)
+    hadoop_do_classpath_subcommand CLASS "$@"
+  ;;
+  cluster)
+    CLASS=org.apache.hadoop.yarn.client.cli.ClusterCLI
+    hadoop_debug "Append YARN_CLIENT_OPTS onto YARN_OPTS"
+    YARN_OPTS="${YARN_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  daemonlog)
+    CLASS=org.apache.hadoop.log.LogLevel
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  envvars)
+    echo "JAVA_HOME='${JAVA_HOME}'"
+    echo "HADOOP_YARN_HOME='${HADOOP_YARN_HOME}'"
+    echo "YARN_DIR='${YARN_DIR}'"
+    echo "YARN_LIB_JARS_DIR='${YARN_LIB_JARS_DIR}'"
+    echo "HADOOP_CONF_DIR='${HADOOP_CONF_DIR}'"
+    echo "HADOOP_TOOLS_PATH='${HADOOP_TOOLS_PATH}'"
+    exit 0
+  ;;
+  jar)
+    CLASS=org.apache.hadoop.util.RunJar
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  historyserver)
+    supportdaemonization="true"
+    echo "DEPRECATED: Use of this command to start the timeline server is deprecated." 1>&2
+    echo "Instead use the timelineserver command for it." 1>&2
+    echo "Starting the History Server anyway..." 1>&2
+    CLASS='org.apache.hadoop.yarn.server.applicationhistoryservice.ApplicationHistoryServer'
+  ;;
+  logs)
+    CLASS=org.apache.hadoop.yarn.client.cli.LogsCLI
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  node)
+    CLASS=org.apache.hadoop.yarn.client.cli.NodeCLI
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  nodemanager)
+    supportdaemonization="true"
+    CLASS='org.apache.hadoop.yarn.server.nodemanager.NodeManager'
+    hadoop_debug "Append YARN_NODEMANAGER_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_NODEMANAGER_OPTS}"
+    # Backwards compatibility
+    if [[ -n "${YARN_NODEMANAGER_HEAPSIZE}" ]]; then
+      HADOOP_HEAPSIZE_MAX="${YARN_NODEMANAGER_HEAPSIZE}"
+    fi
+  ;;
+  proxyserver)
+    supportdaemonization="true"
+    CLASS='org.apache.hadoop.yarn.server.webproxy.WebAppProxyServer'
+    hadoop_debug "Append YARN_PROXYSERVER_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_PROXYSERVER_OPTS}"
+    # Backwards compatibility
+    if [[ -n "${YARN_PROXYSERVER_HEAPSIZE}" ]]; then
+      HADOOP_HEAPSIZE_MAX="${YARN_PROXYSERVER_HEAPSIZE}"
+    fi
+  ;;
+  queue)
+    CLASS=org.apache.hadoop.yarn.client.cli.QueueCLI
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  resourcemanager)
+    supportdaemonization="true"
+    CLASS='org.apache.hadoop.yarn.server.resourcemanager.ResourceManager'
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_RESOURCEMANAGER_OPTS}"
+    hadoop_debug "Append YARN_RESOURCEMANAGER_OPTS onto HADOOP_OPTS"
+    # Backwards compatibility
+    if [[ -n "${YARN_RESOURCEMANAGER_HEAPSIZE}" ]]; then
+      HADOOP_HEAPSIZE_MAX="${YARN_RESOURCEMANAGER_HEAPSIZE}"
+    fi
+  ;;
+  rmadmin)
+    CLASS='org.apache.hadoop.yarn.client.cli.RMAdminCLI'
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  scmadmin)
+    CLASS='org.apache.hadoop.yarn.client.SCMAdmin'
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  sharedcachemanager)
+    supportdaemonization="true"
+    CLASS='org.apache.hadoop.yarn.server.sharedcachemanager.SharedCacheManager'
+    hadoop_debug "Append YARN_SHAREDCACHEMANAGER_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_SHAREDCACHEMANAGER_OPTS}"
+  ;;
+  timelineserver)
+    supportdaemonization="true"
+    CLASS='org.apache.hadoop.yarn.server.applicationhistoryservice.ApplicationHistoryServer'
+    hadoop_debug "Append YARN_TIMELINESERVER_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_TIMELINESERVER_OPTS}"
+    # Backwards compatibility
+    if [[ -n "${YARN_TIMELINESERVER_HEAPSIZE}" ]]; then
+      HADOOP_HEAPSIZE_MAX="${YARN_TIMELINESERVER_HEAPSIZE}"
+    fi
+  ;;
+  version)
+    CLASS=org.apache.hadoop.util.VersionInfo
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  top)
+    doNotSetCols=0
+    doNotSetRows=0
+    for i in "$@"; do
+      if [[ $i == "-cols" ]]; then
+        doNotSetCols=1
+      fi
+      if [[ $i == "-rows" ]]; then
+        doNotSetRows=1
+      fi
+    done
+    if [ $doNotSetCols == 0 ] && [ -n "${TERM}" ]; then
+      cols=$(tput cols)
+      if [ -n "$cols" ]; then
+        args=( $@ )
+        args=("${args[@]}" "-cols" "$cols")
+        set -- "${args[@]}"
+      fi
+    fi
+    if [ $doNotSetRows == 0 ] && [ -n "${TERM}" ]; then
+      rows=$(tput lines)
+      if [ -n "$rows" ]; then
+        args=( $@ )
+        args=("${args[@]}" "-rows" "$rows")
+        set -- "${args[@]}"
+      fi
+    fi
+    CLASS=org.apache.hadoop.yarn.client.cli.TopCLI
+    hadoop_debug "Append YARN_CLIENT_OPTS onto HADOOP_OPTS"
+    HADOOP_OPTS="${HADOOP_OPTS} ${YARN_CLIENT_OPTS}"
+  ;;
+  *)
+    CLASS="${COMMAND}"
+    if ! hadoop_validate_classname "${CLASS}"; then
+      hadoop_exit_with_usage 1
+    fi
+  ;;
+esac
+
+hadoop_verify_user "${COMMAND}"
+
+if [[ ${HADOOP_SLAVE_MODE} = true ]]; then
+  hadoop_common_slave_mode_execute "${HADOOP_YARN_HOME}/bin/yarn" "${HADOOP_USER_PARAMS[@]}"
+  exit $?
+fi
+
+daemon_outfile="${HADOOP_LOG_DIR}/hadoop-${HADOOP_IDENT_STRING}-${COMMAND}-${HOSTNAME}.out"
+daemon_pidfile="${HADOOP_PID_DIR}/hadoop-${HADOOP_IDENT_STRING}-${COMMAND}.pid"
+
+if [[  "${HADOOP_DAEMON_MODE}" != "default" ]]; then
+  # shellcheck disable=SC2034
+  HADOOP_ROOT_LOGGER="${HADOOP_DAEMON_ROOT_LOGGER}"
+  HADOOP_LOGFILE="hadoop-${HADOOP_IDENT_STRING}-${COMMAND}-${HOSTNAME}.log"
+fi
+
+hadoop_finalize
+
+if [[ -n "${supportdaemonization}" ]]; then
+  if [[ -n "${secure_service}" ]]; then
+    hadoop_secure_daemon_handler "${HADOOP_DAEMON_MODE}" "${COMMAND}" \
+    "${CLASS}" "${daemon_pidfile}" "${daemon_outfile}" \
+    "${priv_pidfile}" "${priv_outfile}" "${priv_errfile}" "$@"
+  else
+    hadoop_daemon_handler "${HADOOP_DAEMON_MODE}" "${COMMAND}" "${CLASS}" \
+    "${daemon_pidfile}" "${daemon_outfile}" "$@"
+  fi
+  exit $?
+else
+  hadoop_java_exec "${COMMAND}" "${CLASS}" "$@"
+fi

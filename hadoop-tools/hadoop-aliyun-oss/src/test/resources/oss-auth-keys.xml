@@ -1,0 +1,44 @@
+<configuration>
+    <!--
+      ~ Licensed to the Apache Software Foundation (ASF) under one
+      ~  or more contributor license agreements.  See the NOTICE file
+      ~  distributed with this work for additional information
+      ~  regarding copyright ownership.  The ASF licenses this file
+      ~  to you under the Apache License, Version 2.0 (the
+      ~  "License"); you may not use this file except in compliance
+      ~  with the License.  You may obtain a copy of the License at
+      ~
+      ~       http://www.apache.org/licenses/LICENSE-2.0
+      ~
+      ~  Unless required by applicable law or agreed to in writing, software
+      ~  distributed under the License is distributed on an "AS IS" BASIS,
+      ~  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+      ~  See the License for the specific language governing permissions and
+      ~  limitations under the License.
+      -->
+
+    <property>
+        <name>test.fs.oss.name</name>
+        <!-- Your bucket URL for oss filesystem tests, for example: oss://hadoop-intg/ -->
+        <value>oss://hadoop-intg/</value>
+    </property>
+
+    <property>
+        <name>fs.oss.endpoint</name>
+        <!-- Endpoint internet URL, for example: Hangzhou center:oss-cn-hangzhou.aliyuncs.com, Shanghai center:oss-cn-shanghai.aliyuncs.com, etc
+        Please refer to latest oss document for all endpoint URLs.
+        -->
+        <value>oss-cn-shanghai.aliyuncs.com</value>
+    </property>
+
+    <property>
+        <name>fs.oss.access.key</name>
+        <value>*** Provide your AccessKeyId ***</value>
+    </property>
+
+    <property>
+        <name>fs.oss.secret.key</name>
+        <value>*** Provide your AccessKeySecret ***</value>
+    </property>
+
+</configuration>

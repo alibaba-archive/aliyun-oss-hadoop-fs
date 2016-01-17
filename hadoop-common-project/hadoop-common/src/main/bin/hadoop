@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+MYNAME="${BASH_SOURCE-$0}"
+
+function hadoop_usage
+{
+  hadoop_add_option "buildpaths" "attempt to add class files from build tree"
+  hadoop_add_option "hostnames list[,of,host,names]" "hosts to use in slave mode"
+  hadoop_add_option "loglevel level" "set the log4j level for this command"
+  hadoop_add_option "hosts filename" "list of hosts to use in slave mode"
+  hadoop_add_option "slaves" "turn on slave mode"
+
+  hadoop_add_subcommand "archive" "create a Hadoop archive"
+  hadoop_add_subcommand "checknative" "check native Hadoop and compression libraries availability"
+  hadoop_add_subcommand "classpath" "prints the class path needed to get the Hadoop jar and the required libraries"
+  hadoop_add_subcommand "conftest" "validate configuration XML files"
+  hadoop_add_subcommand "credential" "interact with credential providers"
+  hadoop_add_subcommand "daemonlog" "get/set the log level for each daemon"
+  hadoop_add_subcommand "distch" "distributed metadata changer"
+  hadoop_add_subcommand "distcp" "copy file or directories recursively"
+  hadoop_add_subcommand "envvars" "display computed Hadoop environment variables"
+  hadoop_add_subcommand "fs" "run a generic filesystem user client"
+  hadoop_add_subcommand "jar <jar>" "run a jar file. NOTE: please use \"yarn jar\" to launch YARN applications, not this command."
+  hadoop_add_subcommand "jnipath" "prints the java.library.path"
+  hadoop_add_subcommand "kerbname" "show auth_to_local principal conversion"
+  hadoop_add_subcommand "key" "manage keys via the KeyProvider"
+  hadoop_add_subcommand "trace" "view and modify Hadoop tracing settings"
+  hadoop_add_subcommand "version" "print the version"
+  hadoop_generate_usage "${MYNAME}" true
+}
+
+# This script runs the hadoop core commands.
+
+# let's locate libexec...
+if [[ -n "${HADOOP_PREFIX}" ]]; then
+  HADOOP_DEFAULT_LIBEXEC_DIR="${HADOOP_PREFIX}/libexec"
+else
+  bin=$(cd -P -- "$(dirname -- "${MYNAME}")" >/dev/null && pwd -P)
+  HADOOP_DEFAULT_LIBEXEC_DIR="${bin}/../libexec"
+fi
+
+HADOOP_LIBEXEC_DIR="${HADOOP_LIBEXEC_DIR:-$HADOOP_DEFAULT_LIBEXEC_DIR}"
+# shellcheck disable=SC2034
+HADOOP_NEW_CONFIG=true
+if [[ -f "${HADOOP_LIBEXEC_DIR}/hadoop-config.sh" ]]; then
+  . "${HADOOP_LIBEXEC_DIR}/hadoop-config.sh"
+else
+  echo "ERROR: Cannot execute ${HADOOP_LIBEXEC_DIR}/hadoop-config.sh." 2>&1
+  exit 1
+fi
+
+if [ $# = 0 ]; then
+  hadoop_exit_with_usage 1
+fi
+
+COMMAND=$1
+shift
+
+case ${COMMAND} in
+  balancer|datanode|dfs|dfsadmin|dfsgroups|  \
+  namenode|secondarynamenode|fsck|fetchdt|oiv| \
+  portmap|nfs3)
+    hadoop_error "WARNING: Use of this script to execute ${COMMAND} is deprecated."
+    COMMAND=${COMMAND/dfsgroups/groups}
+    hadoop_error "WARNING: Attempting to execute replacement \"hdfs ${COMMAND}\" instead."
+    hadoop_error ""
+    #try to locate hdfs and if present, delegate to it.
+    if [[ -f "${HADOOP_HDFS_HOME}/bin/hdfs" ]]; then
+      # shellcheck disable=SC2086
+      exec "${HADOOP_HDFS_HOME}/bin/hdfs" \
+      --config "${HADOOP_CONF_DIR}" "${COMMAND}"  "$@"
+    elif [[ -f "${HADOOP_PREFIX}/bin/hdfs" ]]; then
+      # shellcheck disable=SC2086
+      exec "${HADOOP_PREFIX}/bin/hdfs" \
+      --config "${HADOOP_CONF_DIR}" "${COMMAND}" "$@"
+    else
+      hadoop_error "HADOOP_HDFS_HOME not found!"
+      exit 1
+    fi
+  ;;
+
+  #mapred commands for backwards compatibility
+  pipes|job|queue|mrgroups|mradmin|jobtracker|tasktracker)
+    hadoop_error "WARNING: Use of this script to execute ${COMMAND} is deprecated."
+    COMMAND=${COMMAND/mrgroups/groups}
+    hadoop_error "WARNING: Attempting to execute replacement \"mapred ${COMMAND}\" instead."
+    hadoop_error ""
+    #try to locate mapred and if present, delegate to it.
+    if [[ -f "${HADOOP_MAPRED_HOME}/bin/mapred" ]]; then
+      exec "${HADOOP_MAPRED_HOME}/bin/mapred" \
+      --config "${HADOOP_CONF_DIR}" "${COMMAND}" "$@"
+    elif [[ -f "${HADOOP_PREFIX}/bin/mapred" ]]; then
+      exec "${HADOOP_PREFIX}/bin/mapred" \
+      --config "${HADOOP_CONF_DIR}" "${COMMAND}" "$@"
+    else
+      hadoop_error "HADOOP_MAPRED_HOME not found!"
+      exit 1
+    fi
+  ;;
+  archive)
+    CLASS=org.apache.hadoop.tools.HadoopArchives
+    hadoop_add_to_classpath_toolspath
+  ;;
+  checknative)
+    CLASS=org.apache.hadoop.util.NativeLibraryChecker
+  ;;
+  classpath)
+    hadoop_do_classpath_subcommand CLASS "$@"
+  ;;
+  conftest)
+    CLASS=org.apache.hadoop.util.ConfTest
+  ;;
+  credential)
+    CLASS=org.apache.hadoop.security.alias.CredentialShell
+  ;;
+  daemonlog)
+    CLASS=org.apache.hadoop.log.LogLevel
+  ;;
+  distch)
+    CLASS=org.apache.hadoop.tools.DistCh
+    hadoop_add_to_classpath_toolspath
+  ;;
+  distcp)
+    CLASS=org.apache.hadoop.tools.DistCp
+    hadoop_add_to_classpath_toolspath
+  ;;
+  envvars)
+    echo "JAVA_HOME='${JAVA_HOME}'"
+    echo "HADOOP_COMMON_HOME='${HADOOP_COMMON_HOME}'"
+    echo "HADOOP_COMMON_DIR='${HADOOP_COMMON_DIR}'"
+    echo "HADOOP_COMMON_LIB_JARS_DIR='${HADOOP_COMMON_LIB_JARS_DIR}'"
+    echo "HADOOP_COMMON_LIB_NATIVE_DIR='${HADOOP_COMMON_LIB_NATIVE_DIR}'"
+    echo "HADOOP_CONF_DIR='${HADOOP_CONF_DIR}'"
+    echo "HADOOP_TOOLS_PATH='${HADOOP_TOOLS_PATH}'"
+    exit 0
+  ;;
+  fs)
+    CLASS=org.apache.hadoop.fs.FsShell
+  ;;
+  jar)
+    if [[ -n "${YARN_OPTS}" ]] || [[ -n "${YARN_CLIENT_OPTS}" ]]; then
+      hadoop_error "WARNING: Use \"yarn jar\" to launch YARN applications."
+    fi
+    CLASS=org.apache.hadoop.util.RunJar
+  ;;
+  jnipath)
+    hadoop_finalize
+    echo "${JAVA_LIBRARY_PATH}"
+    exit 0
+  ;;
+  kerbname)
+    CLASS=org.apache.hadoop.security.HadoopKerberosName
+  ;;
+  key)
+    CLASS=org.apache.hadoop.crypto.key.KeyShell
+  ;;
+  trace)
+    CLASS=org.apache.hadoop.tracing.TraceAdmin
+  ;;
+  version)
+    CLASS=org.apache.hadoop.util.VersionInfo
+  ;;
+  *)
+    CLASS="${COMMAND}"
+    if ! hadoop_validate_classname "${CLASS}"; then
+      hadoop_exit_with_usage 1
+    fi
+  ;;
+esac
+
+hadoop_verify_user "${COMMAND}"
+
+if [[ ${HADOOP_SLAVE_MODE} = true ]]; then
+  hadoop_common_slave_mode_execute "${HADOOP_HDFS_HOME}/bin/hdfs" "${HADOOP_USER_PARAMS[@]}"
+  exit $?
+fi
+
+# Always respect HADOOP_OPTS and HADOOP_CLIENT_OPTS
+hadoop_debug "Appending HADOOP_CLIENT_OPTS onto HADOOP_OPTS"
+HADOOP_OPTS="${HADOOP_OPTS} ${HADOOP_CLIENT_OPTS}"
+
+hadoop_finalize
+hadoop_java_exec "${COMMAND}" "${CLASS}" "$@"
+

@@ -260,7 +260,7 @@ testOverwriteEmptyDirectory   skipped
 三项测试内容是Skipped状态, AWS S3A和Aliyun OSS皆不支持.
 ```
 
-![alt text](https://git.oschina.net/guoxu1231/hadoop-oos/raw/master/hadoop-tools/hadoop-aliyun-oss/src/site/resources/TCs.JPG?dir=0&filepath=hadoop-tools/hadoop-aliyun-oss/src/site/resources/TCs.JPG&oid=84e2582d4ca8544ec2b1ac5fcaf122f8cd271700&sha=0ad7f9773e5450de2230c21f02005823a462dee5 "Title")
+![alt text](https://raw.githubusercontent.com/aliyun-beta/aliyun-oss-hadoop-fs/master/hadoop-tools/hadoop-aliyun-oss/src/site/resources/TCs.JPG "Title")
 ```
 TestOSSContractDelete
 	testDeleteNonEmptyDirNonRecursive 	
@@ -367,7 +367,7 @@ TestOSSContractSeek
 # Code Coverage Status  
 ```Note: The real code coverage is higher that below diagram, below results are not accurate```    
 
-![alt text](https://git.oschina.net/guoxu1231/hadoop-oos/raw/master/hadoop-tools/hadoop-aliyun-oss/src/site/resources/cc_20151229.JPG?dir=0&filepath=hadoop-tools/hadoop-aliyun-oss/src/site/resources/cc_20151229.JPG&oid=d2e6de8bca69dd3018db9fca524db66d6658a653&sha=0ad7f9773e5450de2230c21f02005823a462dee5 "Title")
+![alt text](https://raw.githubusercontent.com/aliyun-beta/aliyun-oss-hadoop-fs/master/hadoop-tools/hadoop-aliyun-oss/src/site/resources/cc_20151229.JPG "Title")
 
 # License
 Licensed under the Apache License 2.0  
